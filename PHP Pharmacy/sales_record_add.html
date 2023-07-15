@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content="Add Sales Record Page" />
+		<meta name="keywords" content="sales management" />
+		<meta name="author" content="Yasir Lutfan bin Yusuf" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Add Sales Record Page</title>
+		
+		<script src="js/add_sales_record.js"></script>
+	</head>
+	<body>
+		<?php
+			function GetFormStringValue(string $formArg) : string {
+				if (!empty($_POST[$formArg])) {
+					return $_POST[$formArg];
+				} else {
+					return '';
+				}
+			}
+			
+			function GetFormArrayValue(string $formArrayName) : array {
+				// TODO
+				return array();
+			}
+			
+			function QueryDatabase(mysqli& $connection, string $query, array $arguments) : array {
+				$returnValue = array();
+				
+				if (empty($arguments)) {
+					$result = $connection->query($query);
+					if ($result) {
+						$returnValue[0] = true;
+						$returnValue[1] = $result;
+					} else {
+						$returnValue[0] = $result;
+						$returnValue[1] = $connection->error;
+					}
+				} else {
+					$queryObj = $connection->prepare($query);
+					$queryObj->bind_param(str_repeat('s', count($arguments)), ...$arguments);
+					$returnValue[0] = $queryObj->execute();
+					if ($returnValue[0]) {
+						$returnValue[1] = $queryObj->get_result();
+					} else {
+						$returnValue[1] = $queryObj->error;
+					}
+					$queryObj->close();
+				}
+				
+				return $returnValue;
+			}
+			
+			function UpdateDatabaseInformation(string $customer, string $saleTime, string $taxAmount, string $discountAmount) {
+				$returnHeader = 'An error occurred while updating the database:<br />';
+				
+				$connection = new mysqli('localhost', 'root', '', 'salesrecords', 3306);
+				if ($connection->connect_error) {
+					return "Failed to connect to the database. Technical details:<br />{$connection->connect_error}";
+				}
+				
+				// add the customer into the customer table
+				$queryReturns = QueryDatabase($connection, 'SELECT `id` FROM `Customers` WHERE `name` = ?', array($customer));
+				if ($queryReturns[0]) {
+					$rowData = $queryReturns[1]->fetch_assoc();
+					$queryReturns[1]->close();
+					
+					if ($rowData) {
+						$customerID = $rowData['id'];
+					} else {
+						// add the customer
+						$queryReturns = QueryDatabase($connection, 'INSERT INTO `Customers` (`name`) VALUES (?)', array($customer));
+						if (!$queryReturns[0]) {
+							$connection->close();
+							return $returnHeader.$queryReturns[1];
+						}
+						
+						$queryReturns = QueryDatabase($connection, 'SELECT LAST_INSERT_ID()', array());
+						if ($queryReturns[0]) {
+							$rowData = $queryReturns[1]->fetch_assoc();
+							$queryReturns[1]->close();
+							$customerID = $rowData['LAST_INSERT_ID()'];
+						} else {
+							$connection->close();
+							return $returnHeader.$queryReturns[1];
+						}
+					}
+				} else {
+					$connection->close();
+					return $returnHeader.$queryReturns[1];
+				}
+				
+				// add the sales record into the table
+				if (empty($saleTime)) {
+					$queryReturns = QueryDatabase(
+						$connection,
+						'INSERT INTO `SalesRecords` (`customerID`, `taxAmount`, `discountAmount`) VALUES (?, ?, ?)',
+						array($customerID, $taxAmount, $discountAmount)
+					);
+					if (!$queryReturns[0]) {
+						$connection->close();
+						return $returnHeader.$queryReturns[1];
+					}
+				} else {
+					$queryReturns = QueryDatabase(
+						$connection,
+						'INSERT INTO `SalesRecords` (`customerID`, `saleTime`, `taxAmount`, `discountAmount`) VALUES (?, ?, ?, ?)',
+						array($customerID, $saleTime, $taxAmount, $discountAmount)
+					);
+					if (!$queryReturns[0]) {
+						$connection->close();
+						return $returnHeader.$queryReturns[1];
+					}
+				}
+				
+				$queryReturns = QueryDatabase($connection, 'SELECT LAST_INSERT_ID()', array());
+				if ($queryReturns[0]) {
+					$rowData = $queryReturns[1]->fetch_assoc();
+					$queryReturns[1]->close();
+					$saleID = $rowData['LAST_INSERT_ID()'];
+				} else {
+					$connection->close();
+					return $returnHeader.$queryReturns[1];
+				}
+				
+				// TODO: More details should be added to the database!
+				
+				$connection->close();
+				return false;
+			}
+			
+			if ($_SERVER['REQUEST_METHOD'] == 'POST')
+			{
+				$customer = GetFormStringValue('customer');
+				$saleTime = GetFormStringValue('sale_time');
+				$taxAmount = GetFormStringValue('tax_amount');
+				$discountAmount = GetFormStringValue('discount_amount');
+				
+				$products = GetFormArrayValue('products');
+				$categories = GetFormArrayValue('categories');
+				$amounts = GetFormArrayValue('amounts');
+				$prices = GetFormArrayValue('prices');
+				
+				$errMsg = UpdateDatabaseInformation($customer, $saleTime, $taxAmount, $discountAmount);
+				if ($errMsg) {
+					echo($errMsg);
+				} else {
+					echo('Sales record added successfully.');
+				}
+			}
+		?>
+		
+		<form method="post" name="sales_record_form">
+			<p>
+				<label for="customer">Customer Name:</label>
+				<input type="text" id="customer" name="customer" required="required" />
+				<br />
+				<label for="sale_time">Sale Time:</label>
+				<input type="datetime-local" id="sale_time" name="sale_time" />
+				<br />
+				<small>Optional; if this is not specified, the current time and date will be assumed to be the sale time and date.</small>
+				<br />
+				<label for="tax_amount">Taxed Amount:</label>
+				<input type="number" id="tax_amount" name="tax_amount" required="required" />
+				<br />
+				<label for="discount_amount">Discounted Amount:</label>
+				<input type="number" id="discount_amount" name="discount_amount" required="required" />
+			</p>
+			<input type="submit" id="sales_record_add" name="sales_record_add" value="Add Record" />
+		</form>
+	</body>
+</html>

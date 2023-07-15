@@ -1,0 +1,12 @@
+RECORDS REQUIREMENTS:
+SalesRecords
+- id, customerID, saleTime, taxAmount, discountAmount
+
+SalesProducts
+- saleID, productID, amount, price
+
+Products
+- id, name, categoryID
+
+Categories
+- id, name
